@@ -1,6 +1,3 @@
-Certainly! Here's a comprehensive `README.md` tailored for your [E-Voting-System](https://github.com/Sohamsitapara/E-Voting-System) repository. This guide will assist users in setting up, running, and understanding the functionalities of your project.
-
----
 
 # 🗳️ E-Voting System
 
@@ -41,8 +38,6 @@ A secure, privacy-preserving remote voting system built with Node.js and TypeScr
 - **SSL Certificats:** Ensure secure communication between clients and the server, preventing man-in-the-middle atacks.
 
 ---
-
-Feel free to customize this `README.md` further to suit your project's needs. Let me know if you need assistance with any specific sections or additional features! 
 
 ## 🧪 Testing the Application
 
@@ -94,5 +89,3 @@ Contributions are welcome! Please fork the repository and submit a pull request 
 For any inquiries or support, please contact [Soham Sitapara](mailto:soham.v.sitapara@gmail.com).
 
 ---
-
-Feel free to customize this `README.md` further to align with any additional features or configurations specific to your project. 
