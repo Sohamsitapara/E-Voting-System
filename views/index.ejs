@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="<%= csrfToken %>">
+    <title>E-Voting System</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/node-forge@1.0.0/dist/forge.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Secure E-Voting System</h1>
+        
+        <div id="alert" class="alert" style="display: none;"></div>
+
+        <div class="status-box">
+            <h2>Election Status</h2>
+            <p>Current Phase: <strong><%= electionState.phase %></strong></p>
+            <p>Total Registered Voters: <strong><%= electionState.totalRegisteredVoters %></strong></p>
+            <p>Total Votes Cast: <strong><%= electionState.totalVotesCast %></strong></p>
+            <% if (electionState.question) { %>
+                <p>Question: <strong><%= electionState.question %></strong></p>
+                <p>Options:</p>
+                <ul>
+                    <% electionState.options.forEach(option => { %>
+                        <li><strong><%= option %></strong></li>
+                    <% }); %>
+                </ul>
+            <% } else { %>
+                <p class="warning">Election has not been initialized yet. Please wait for the administrator to set up the election.</p>
+            <% } %>
+        </div>
+
+        <% if (electionState.phase === 'SETUP') { %>
+            <div class="section info-section">
+                <h2>Election Setup</h2>
+                <p>The election is currently being set up by the administrator. Please wait for the registration phase to begin.</p>
+                <p>Once the election is initialized, you will be able to register as a voter here.</p>
+            </div>
+        <% } %>
+
+        <div id="registrationSection" class="section">
+            <h2>Step 1: Voter Registration</h2>
+            <% if (electionState.phase === 'REGISTRATION') { %>
+                <div class="info-box">
+                    <p>Welcome to the voter registration phase! To participate in this election:</p>
+                    <ol>
+                        <li>Enter your full name below to register</li>
+                        <li>Save your voter credentials securely - you'll need them to vote</li>
+                        <li>Wait for the voting phase to begin</li>
+                    </ol>
+                </div>
+                <form id="registrationForm" onsubmit="return handleRegistration(event)">
+                    <div class="form-group">
+                        <label for="voterName">Full Name:</label>
+                        <input type="text" id="voterName" name="voterName" placeholder="Enter your full name" required>
+                    </div>
+                    <button type="submit" class="primary-button">Register to Vote</button>
+                </form>
+                <div id="credentialsBox" style="display: none;" class="receipt-box">
+                    <h3>⚠️ Your Voter Credentials ⚠️</h3>
+                    <p class="warning">IMPORTANT: Save these credentials immediately! They cannot be recovered if lost.</p>
+                    <div id="credentialsDetails" class="receipt-details"></div>
+                    <div class="button-group">
+                        <button onclick="copyCredentials()" class="secondary-button">Copy Credentials</button>
+                        <button onclick="downloadCredentials()" class="secondary-button">Download Credentials</button>
+                    </div>
+                </div>
+            <% } else if (electionState.phase === 'SETUP') { %>
+                <p class="info-text">Please wait for the election to be initialized before registering.</p>
+            <% } else { %>
+                <p class="warning-text">Registration phase is closed. No new voters can be registered at this time.</p>
+            <% } %>
+        </div>
+
+        <div id="votingSection" class="section">
+            <h2>Step 2: Cast Your Vote</h2>
+            <% if (electionState.phase === 'VOTING') { %>
+                <div class="info-box">
+                    <p>To cast your vote:</p>
+                    <ol>
+                        <li>Select your preferred option below</li>
+                        <li>Your vote will be encrypted before sending</li>
+                        <li>Save your vote receipt to verify later</li>
+                    </ol>
+                </div>
+                <form id="votingForm" onsubmit="return handleVoting(event)">
+                    <div class="voting-options">
+                        <% electionState.options.forEach((option, index) => { %>
+                            <div class="voting-option">
+                                <input type="radio" name="choice" value="<%= index %>" id="option<%= index %>" required>
+                                <label for="option<%= index %>"><%= option %></label>
+                            </div>
+                        <% }); %>
+                    </div>
+                    <button type="submit" class="primary-button">Cast Vote</button>
+                </form>
+                <div id="voting-receipt" class="receipt-box"></div>
+                <div id="voting-result" class="result-box"></div>
+            <% } else if (electionState.phase === 'REGISTRATION') { %>
+                <p class="info-text">Voting will begin once the registration phase is complete.</p>
+            <% } else { %>
+                <p class="info-text">Voting is not currently open.</p>
+            <% } %>
+        </div>
+
+        <div class="section">
+            <h2>Step 3: Verify Your Vote</h2>
+            <% if (electionState.phase === 'VOTING' || electionState.phase === 'TALLYING' || electionState.phase === 'COMPLETED') { %>
+                <div class="info-box">
+                    <p>To verify your vote:</p>
+                    <ol>
+                        <li>Enter your receipt ID below</li>
+                        <li>Or select from your saved receipts</li>
+                        <li>The system will confirm if your vote was recorded correctly</li>
+                    </ol>
+                </div>
+                <div id="savedReceipts" class="saved-receipts-container"></div>
+                <form id="verifyForm" onsubmit="return handleVerification(event)">
+                    <div class="form-group">
+                        <label for="receiptId">Receipt ID:</label>
+                        <input type="text" id="receiptId" name="receiptId" placeholder="Enter your receipt ID" required>
+                    </div>
+                    <button type="submit" class="primary-button">Verify Vote</button>
+                </form>
+                <div id="verification-result" class="verification-box" style="display: none;"></div>
+            <% } else { %>
+                <p class="info-text">Vote verification will be available once voting begins.</p>
+            <% } %>
+        </div>
+
+        <% if (electionState.phase === 'TALLYING' || electionState.phase === 'COMPLETED') { %>
+            <div class="section">
+                <h2>Election Results</h2>
+                <button onclick="getResults()">View Results</button>
+                <div id="results"></div>
+            </div>
+        <% } %>
+    </div>
+
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background-color: #fff;
+        }
+        .info-section {
+            background-color: #e8f4f8;
+            border-color: #b8daff;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .primary-button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .primary-button:hover {
+            background-color: #0056b3;
+        }
+        .secondary-button {
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .secondary-button:hover {
+            background-color: #545b62;
+        }
+        .warning-text {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .info-text {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .voting-options {
+            margin: 20px 0;
+        }
+        .voting-option {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .voting-option:hover {
+            background-color: #f8f9fa;
+        }
+        .status-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .receipt-box {
+            margin-top: 20px;
+            padding: 20px;
+            border: 2px dashed #dc3545;
+            border-radius: 8px;
+            background-color: #fff3f4;
+        }
+        .receipt-details {
+            font-family: monospace;
+            padding: 15px;
+            margin: 15px 0;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .warning {
+            color: #721c24;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .verification-box {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+        }
+        .verification-box.success {
+            background-color: #e8f5e9;
+            border-color: #4caf50;
+        }
+        .verification-box.error {
+            background-color: #ffebee;
+            border-color: #ef5350;
+        }
+        .verification-details h4 {
+            margin: 0 0 15px 0;
+            font-size: 1.2em;
+        }
+        .verification-details p {
+            margin: 10px 0;
+        }
+        .verification-details ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .saved-receipts-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        .saved-receipt {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+        }
+        .saved-receipt button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .saved-receipt button:hover {
+            background-color: #0056b3;
+        }
+        .alert {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 4px;
+            color: white;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        .alert.success {
+            background-color: #4caf50;
+        }
+        .alert.error {
+            background-color: #f44336;
+        }
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+
+    <script>
+        // Store and retrieve voter credentials and receipts
+        let voterCredentials = secureRetrieve('voterCredentials');
+        let currentReceipt = null;
+        let savedReceipts = secureRetrieve('savedReceipts') || [];
+        let lastKnownPhase = localStorage.getItem('lastKnownPhase');
+        const currentPhase = '<%= electionState.phase %>';
+
+        // Check if election phase has changed
+        if (lastKnownPhase && lastKnownPhase !== currentPhase) {
+            // Clear data only when transitioning from VOTING to another phase
+            if (lastKnownPhase === 'VOTING' && currentPhase !== 'VOTING') {
+                clearVoterData();
+            }
+        }
+        // Update the last known phase
+        localStorage.setItem('lastKnownPhase', currentPhase);
+
+        // Function to clear voter data
+        function clearVoterData() {
+            localStorage.removeItem('voterCredentials');
+            localStorage.removeItem('savedReceipts');
+            localStorage.removeItem('currentReceipt');
+            voterCredentials = null;
+            currentReceipt = null;
+            savedReceipts = [];
+            showAlert('Voter session ended', 'info');
+        }
+
+        // Add manual clear button in the status box
+        const statusBox = document.querySelector('.status-box');
+        if (statusBox && voterCredentials) {
+            const clearButton = document.createElement('button');
+            clearButton.className = 'secondary-button';
+            clearButton.style.marginTop = '10px';
+            clearButton.textContent = 'Clear Voter Session';
+            clearButton.onclick = clearVoterData;
+            statusBox.appendChild(clearButton);
+        }
+
+        // Show voting section if already registered
+        if (voterCredentials) {
+            document.getElementById('votingSection').style.display = 'block';
+            // Don't hide registration section, just show a message if already registered
+            const registrationForm = document.getElementById('registrationForm');
+            if (registrationForm) {
+                registrationForm.innerHTML = '<p class="info-text">You are already registered for this election.</p>';
+            }
+            displaySavedReceipts();
+        }
+
+        function displaySavedReceipts() {
+            const container = document.getElementById('savedReceipts');
+            if (container && savedReceipts.length > 0) {
+                const html = `
+                    <h4>Your Previous Receipts:</h4>
+                    <div class="saved-receipts">
+                        ${savedReceipts.map(receipt => `
+                            <div class="saved-receipt">
+                                <span>Receipt ID: ${receipt.receiptId}</span>
+                                <button onclick="verifyVote('${receipt.receiptId}')">Verify</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.innerHTML = html;
+            }
+        }
+
+        async function handleRegistration(event) {
+            event.preventDefault();
+            const form = event.target;
+            const voterName = form.voterName.value;
+
+            try {
+                // First get election state to ensure we're in registration phase
+                const stateResponse = await fetch('/election-state');
+                const stateData = await stateResponse.json();
+                
+                if (stateData.phase !== 'REGISTRATION') {
+                    throw new Error(`Cannot register voters in ${stateData.phase} phase`);
+                }
+
+                // Generate RSA key pair using forge
+                console.log('Generating RSA key pair...');
+                const keyPair = forge.pki.rsa.generateKeyPair({ bits: 2048 });
+                console.log('Key pair generated');
+
+                // Convert keys to PEM format
+                const publicKeyPem = forge.pki.publicKeyToPem(keyPair.publicKey);
+                const privateKeyPem = forge.pki.privateKeyToPem(keyPair.privateKey);
+                
+                // Generate voter ID
+                const voterId = forge.util.encode64(forge.random.getBytesSync(16));
+                console.log('Generated voter ID:', voterId);
+
+                // Register with the server
+                console.log('Sending registration request...');
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        voterId: voterId,
+                        publicKey: publicKeyPem
+                    })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Registration failed');
+                }
+
+                console.log('Registration successful');
+                // Store the complete credentials
+                voterCredentials = {
+                    voterId: voterId,
+                    certificate: data.certificate,
+                    privateKey: privateKeyPem
+                };
+                
+                secureStore('voterCredentials', voterCredentials);
+                showCredentials(voterCredentials);
+                showAlert('Registration successful! Please save your credentials.', 'success');
+                
+                // Update the registration form instead of hiding it
+                form.innerHTML = '<p class="info-text">You are now registered for this election.</p>';
+                document.getElementById('votingSection').style.display = 'block';
+            } catch (error) {
+                console.error('Registration error:', error);
+                showAlert(error.message, 'error');
+            }
+            return false;
+        }
+
+        // Modify credential storage to only keep necessary info
+        function showCredentials(credentials) {
+            const credentialsBox = document.getElementById('credentialsBox');
+            const credentialsDetails = document.getElementById('credentialsDetails');
+            
+            // Only show voter ID and a truncated certificate
+            const truncatedCert = credentials.certificate.substring(0, 50) + '...';
+            const credentialsText = `Voter ID: ${credentials.voterId}
+Certificate (truncated): ${truncatedCert}
+Private Key: [REDACTED - Saved securely]`;
+            
+            credentialsDetails.textContent = credentialsText;
+            credentialsBox.style.display = 'block';
+        }
+
+        function copyCredentials() {
+            if (!voterCredentials) return;
+            const text = `Voter ID: ${voterCredentials.voterId}\nCertificate: ${voterCredentials.certificate}`;
+            navigator.clipboard.writeText(text);
+            showAlert('Credentials copied to clipboard!', 'success');
+        }
+
+        function downloadCredentials() {
+            if (!voterCredentials) return;
+            
+            const credentialsText = `E-Voting Credentials
+================================
+Voter ID: ${voterCredentials.voterId}
+Certificate: ${voterCredentials.certificate}
+Private Key: ${voterCredentials.privateKey}
+================================
+IMPORTANT: Keep these credentials secure and private.
+You will need them to cast your vote.`;
+            
+            const blob = new Blob([credentialsText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `voter-credentials-${voterCredentials.voterId}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function handleVoting(event) {
+            event.preventDefault();
+            if (!voterCredentials) {
+                showAlert('Please register first', 'error');
+                return false;
+            }
+
+            try {
+                const form = event.target;
+                const choice = form.querySelector('input[name="choice"]:checked').value;
+
+                // Get CSRF token
+                const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+                if (!csrfToken) {
+                    throw new Error('CSRF token not found');
+                }
+
+                // Get election state and parameters
+                const stateResponse = await fetch('/election-state');
+                const stateData = await stateResponse.json();
+                
+                if (stateData.phase !== 'VOTING') {
+                    throw new Error('Election is not in voting phase');
+                }
+
+                // Create a random receipt ID
+                const receiptId = forge.util.encode64(forge.random.getBytesSync(16));
+                
+                // Create vote hash
+                const voteHash = forge.md.sha256.create()
+                    .update(voterCredentials.voterId + '-' + choice)
+                    .digest().toHex();
+
+                // Get ElGamal parameters from state
+                const elgamalParams = stateData.elgamalParams;
+                console.log('ElGamal parameters:', elgamalParams);
+
+                // Convert parameters to BigInt
+                const p = BigInt(elgamalParams.p);
+                const g = BigInt(elgamalParams.g);
+                const y = BigInt(elgamalParams.y);
+
+                // Generate random k for ElGamal encryption
+                const k = BigInt('0x' + forge.util.bytesToHex(forge.random.getBytesSync(16))) % p;
+                
+                // Encrypt the vote (using 1 for chosen option)
+                const message = BigInt(1); // We encrypt 1 to represent the vote
+                const c1 = modPow(g, k, p);
+                const c2 = (modPow(y, k, p) * modPow(g, message, p)) % p;
+
+                // Generate ZKP components
+                const r = BigInt('0x' + forge.util.bytesToHex(forge.random.getBytesSync(16))) % p;
+                const commitment = modPow(g, r, p);
+                
+                // Create challenge using hash of public values
+                const challengeInput = `${c1}-${c2}-${commitment}`;
+                const challengeHash = forge.md.sha256.create()
+                    .update(challengeInput)
+                    .digest().toHex();
+                const challenge = BigInt('0x' + challengeHash) % p;
+                
+                // Calculate response = r + k * challenge mod (p-1)
+                const response = (r + (k * challenge)) % (p - BigInt(1));
+
+                // Create signature
+                const privateKey = forge.pki.privateKeyFromPem(voterCredentials.privateKey);
+                const md = forge.md.sha256.create();
+                md.update(voteHash, 'utf8');
+                const signature = forge.util.encode64(privateKey.sign(md));
+
+                console.log('Sending vote with data:', {
+                    voterId: voterCredentials.voterId,
+                    choice,
+                    certificate: voterCredentials.certificate,
+                    receiptId,
+                    voteHash
+                });
+
+                // Send vote request
+                const voteResponse = await fetch('/vote', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': csrfToken
+                    },
+                    body: JSON.stringify({
+                        voterId: voterCredentials.voterId,
+                        choice: choice,
+                        certificate: voterCredentials.certificate,
+                        encryptedVote: {
+                            c1: c1.toString(),
+                            c2: c2.toString()
+                        },
+                        signature: signature,
+                        zkp: {
+                            commitment: commitment.toString(),
+                            challenge: challenge.toString(),
+                            response: response.toString()
+                        },
+                        receiptId: receiptId,
+                        voteHash: voteHash
+                    })
+                });
+                
+                const data = await voteResponse.json();
+                if (voteResponse.ok) {
+                    currentReceipt = data.receipt;
+                    savedReceipts.push(currentReceipt);
+                    secureStore('savedReceipts', savedReceipts);
+                    localStorage.setItem('currentReceipt', JSON.stringify(currentReceipt));
+                    showReceipt(currentReceipt);
+                    displaySavedReceipts();
+                    showAlert('Vote cast successfully!', 'success');
+                } else {
+                    throw new Error(data.error || 'Failed to cast vote');
+                }
+            } catch (error) {
+                console.error('Voting error:', error);
+                showAlert('An error occurred while voting', 'error');
+            }
+            return false;
+        }
+
+        // Helper function for modular exponentiation
+        function modPow(base, exponent, modulus) {
+            if (modulus === BigInt(1)) return BigInt(0);
+            
+            let result = BigInt(1);
+            base = base % modulus;
+            
+            while (exponent > BigInt(0)) {
+                if (exponent % BigInt(2) === BigInt(1)) {
+                    result = (result * base) % modulus;
+                }
+                base = (base * base) % modulus;
+                exponent = exponent / BigInt(2);
+            }
+            
+            return result;
+        }
+
+        function showReceipt(receipt) {
+            const receiptElement = document.getElementById('voting-receipt');
+            if (receiptElement) {
+                receiptElement.textContent = `Vote Receipt ID: ${receipt.receiptId}`;
+                receiptElement.style.display = 'block';
+                // Store receipt ID for later verification
+                localStorage.setItem('voteReceipt', receipt.receiptId);
+            }
+        }
+
+        function copyReceipt() {
+            if (!currentReceipt) return;
+            navigator.clipboard.writeText(currentReceipt.receiptId);
+            showAlert('Receipt ID copied to clipboard!', 'success');
+        }
+
+        function downloadReceipt() {
+            if (!currentReceipt) return;
+            
+            const receiptText = `E-Voting Receipt
+================================
+Receipt ID: ${currentReceipt.receiptId}
+Voter ID: ${currentReceipt.voterId}
+Timestamp: ${new Date(currentReceipt.timestamp).toLocaleString()}
+Vote Hash: ${currentReceipt.voteHash}
+================================
+Please keep this receipt safe to verify your vote later.`;
+            
+            const blob = new Blob([receiptText], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `vote-receipt-${currentReceipt.receiptId}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        async function verifyVoteWithCurrentReceipt() {
+            if (currentReceipt) {
+                await verifyVote(currentReceipt.receiptId);
+            }
+        }
+
+        // Update verify vote function
+        async function verifyVote(receiptId) {
+            try {
+                const response = await fetch(`/verify-vote/${receiptId}`);
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Verification failed');
+                }
+                
+                const verificationBox = document.getElementById('verification-result');
+                if (data.verified) {
+                    const details = `
+                        <div class="verification-details">
+                            <h4>✅ Vote Verification Successful</h4>
+                            <p><strong>Receipt ID:</strong> ${data.receipt.receiptId}</p>
+                            <p><strong>Timestamp:</strong> ${new Date(data.receipt.timestamp).toLocaleString()}</p>
+                            <p><strong>Status:</strong> Your vote was correctly recorded and included in the tally.</p>
+                        </div>
+                    `;
+                    verificationBox.innerHTML = details;
+                    verificationBox.className = 'verification-box success';
+                    verificationBox.style.display = 'block';
+                    showAlert('Vote verified successfully!', 'success');
+                } else {
+                    const details = `
+                        <div class="verification-details">
+                            <h4>❌ Vote Verification Failed</h4>
+                            <p>We could not verify your vote. This could mean:</p>
+                            <ul>
+                                <li>The receipt ID is incorrect</li>
+                                <li>The vote was not properly recorded</li>
+                                <li>The receipt has been tampered with</li>
+                            </ul>
+                            <p>Please contact the election administrator if you believe this is an error.</p>
+                        </div>
+                    `;
+                    verificationBox.innerHTML = details;
+                    verificationBox.className = 'verification-box error';
+                    verificationBox.style.display = 'block';
+                    showAlert('Vote verification failed', 'error');
+                }
+            } catch (error) {
+                console.error('Verification error:', error);
+                showAlert(error.message, 'error');
+                const verificationBox = document.getElementById('verification-result');
+                verificationBox.innerHTML = `
+                    <div class="verification-details">
+                        <h4>❌ Error During Verification</h4>
+                        <p>${error.message}</p>
+                        <p>Please try again later or contact support if the problem persists.</p>
+                    </div>
+                `;
+                verificationBox.className = 'verification-box error';
+                verificationBox.style.display = 'block';
+            }
+        }
+
+        // Update handleVerification function
+        async function handleVerification(event) {
+            event.preventDefault();
+            const receiptId = event.target.receiptId.value;
+            await verifyVote(receiptId);
+            return false;
+        }
+
+        async function getResults() {
+            try {
+                const response = await fetch('/results');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const resultsDiv = document.getElementById('results');
+                    let html = `
+                        <div class="results-container">
+                            <div class="results-summary">
+                                <h3>Election Results</h3>
+                                <p>Total Registered Voters: <strong>${data.totalRegistered}</strong></p>
+                                <p>Total Votes Cast: <strong>${data.totalVotes}</strong></p>
+                                <p>Voter Turnout: <strong>${data.turnout}%</strong></p>
+                            </div>
+
+                            <div class="winner-section">
+                                <h3>Winner</h3>
+                                <p class="winner-name">${data.winner}</p>
+                            </div>
+
+                            <div class="vote-breakdown">
+                                <h3>Vote Distribution</h3>
+                                <table class="results-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Option</th>
+                                            <th>Votes</th>
+                                            <th>Percentage</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${Object.entries(data.breakdown).map(([option, votes]) => `
+                                            <tr>
+                                                <td>${option}</td>
+                                                <td>${votes}</td>
+                                                <td>${data.percentages[option]}%</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    `;
+                    resultsDiv.innerHTML = html;
+
+                    // Add styles for the results
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        .results-container {
+                            padding: 20px;
+                            background: #fff;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                        }
+                        .results-summary {
+                            margin-bottom: 20px;
+                            padding-bottom: 20px;
+                            border-bottom: 1px solid #eee;
+                        }
+                        .winner-section {
+                            text-align: center;
+                            margin: 20px 0;
+                            padding: 20px;
+                            background: #e8f5e9;
+                            border-radius: 8px;
+                        }
+                        .winner-name {
+                            font-size: 24px;
+                            font-weight: bold;
+                            color: #2e7d32;
+                            margin: 10px 0;
+                        }
+                        .results-table {
+                            width: 100%;
+                            border-collapse: collapse;
+                            margin-top: 20px;
+                        }
+                        .results-table th,
+                        .results-table td {
+                            padding: 12px;
+                            text-align: left;
+                            border-bottom: 1px solid #ddd;
+                        }
+                        .results-table th {
+                            background-color: #f5f5f5;
+                            font-weight: bold;
+                        }
+                        .results-table td:nth-child(2),
+                        .results-table td:nth-child(3) {
+                            text-align: right;
+                        }
+                        .vote-breakdown {
+                            margin-top: 20px;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                } else {
+                    throw new Error(data.error || 'Failed to fetch results');
+                }
+            } catch (error) {
+                console.error('Error fetching results:', error);
+                showAlert(error.message, 'error');
+            }
+        }
+
+        // Update the results section to auto-refresh during tallying
+        if (document.querySelector('.section h2').textContent.includes('Election Results')) {
+            // Initial load
+            getResults();
+            // Refresh every 5 seconds during tallying
+            setInterval(getResults, 5000);
+        }
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert ${type}`;
+            alert.style.display = 'block';
+            setTimeout(() => alert.style.display = 'none', 5000);
+        }
+
+        // More secure localStorage handling
+        function secureStore(key, value) {
+            const encrypted = btoa(JSON.stringify(value));
+            localStorage.setItem(key, encrypted);
+        }
+
+        function secureRetrieve(key) {
+            const encrypted = localStorage.getItem(key);
+            if (!encrypted) return null;
+            try {
+                return JSON.parse(atob(encrypted));
+            } catch (e) {
+                return null;
+            }
+        }
+    </script>
+
+    <!-- Add verification result container -->
+    <div id="verification-result" style="display: none;" class="verification-box"></div>
+
+</body>
+</html>

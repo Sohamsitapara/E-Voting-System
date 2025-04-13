@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login - E-Voting System</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <h1>Admin Login</h1>
+            <% if (locals.error) { %>
+                <div class="alert error"><%= error %></div>
+            <% } %>
+            <form method="POST" action="/admin-login">
+                <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                <div class="form-group">
+                    <label for="username">Username:</label>
+                    <input type="text" id="username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    async function handleLogin(event) {
+        event.preventDefault();
+        const form = event.target;
+        
+        try {
+            const response = await fetch('/admin-login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': form._csrf.value
+                },
+                body: JSON.stringify({
+                    username: form.username.value,
+                    password: form.password.value
+                })
+            });
+
+            if (response.redirected) {
+                window.location.href = response.url;
+            } else {
+                const data = await response.json();
+                if (data.error) {
+                    showError(data.error);
+                }
+            }
+        } catch (error) {
+            showError('Login failed. Please try again.');
+        }
+        return false;
+    }
+
+    function showError(message) {
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'alert error';
+        errorDiv.textContent = message;
+        
+        const existingError = document.querySelector('.alert.error');
+        if (existingError) {
+            existingError.remove();
+        }
+        
+        document.querySelector('.login-box').insertBefore(errorDiv, document.querySelector('form'));
+    }
+    </script>
+
+    <style>
+    .login-box {
+        max-width: 400px;
+        margin: 100px auto;
+        padding: 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .alert.error {
+        background-color: #f8d7da;
+        color: #721c24;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+    }
+    </style>
+</body>
+</html>
