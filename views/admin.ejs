@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Voting Admin</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>E-Voting Administration</h1>
+
+        <div class="status-box">
+            <h2>Current Election Status</h2>
+            <p>Phase: <strong><%= electionState.phase %></strong></p>
+        </div>
+
+        <% if (electionState.phase === 'SETUP') { %>
+            <div class="section">
+                <h2>Initialize Election</h2>
+                <form id="initForm" onsubmit="return handleInitialization(event)">
+                    <div class="form-group">
+                        <label for="question">Election Question:</label>
+                        <input type="text" id="question" name="question" placeholder="e.g., Who should be the next president?" required>
+                    </div>
+                    <div id="options-container" class="form-group">
+                        <label>Options:</label>
+                        <input type="text" name="options[]" placeholder="Candidate A" required>
+                        <input type="text" name="options[]" placeholder="Candidate B" required>
+                    </div>
+                    <button type="button" onclick="addOption()">Add Another Option</button>
+                    <div class="form-group">
+                        <label for="duration">Duration (hours):</label>
+                        <input type="number" id="duration" name="durationInHours" value="24" min="1" required>
+                    </div>
+                    <button type="submit">Initialize Election</button>
+                </form>
+            </div>
+        <% } %>
+
+        <% if (electionState.phase === 'REGISTRATION') { %>
+            <div class="section">
+                <h2>Start Voting Phase</h2>
+                <form id="startVotingForm" onsubmit="return handleStartVoting(event)">
+                    <button type="submit">Start Voting</button>
+                </form>
+            </div>
+        <% } %>
+
+        <% if (electionState.phase === 'VOTING') { %>
+            <div class="section">
+                <h2>Voting Phase Controls</h2>
+                <form action="/start-tallying" method="POST">
+                    <button type="submit">End Voting & Start Tallying</button>
+                </form>
+                <p class="info">This will end the voting phase and begin vote counting.</p>
+            </div>
+        <% } %>
+
+        <% if (electionState.phase === 'TALLYING' || electionState.phase === 'COMPLETED') { %>
+            <div id="results" style="display: none;">
+                <h2>Election Results</h2>
+                
+                <div class="stats-box">
+                    <div class="stat">
+                        <h3>Total Registered Voters</h3>
+                        <p id="totalRegistered">-</p>
+                    </div>
+                    <div class="stat">
+                        <h3>Total Votes Cast</h3>
+                        <p id="totalVotes">-</p>
+                    </div>
+                    <div class="stat">
+                        <h3>Voter Turnout</h3>
+                        <p id="turnout">-</p>
+                    </div>
+                </div>
+
+                <div class="winner-box">
+                    <h3>Winner</h3>
+                    <p id="winner" class="winner-text">-</p>
+                </div>
+
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Option</th>
+                            <th>Votes</th>
+                            <th>Percentage</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+
+            <style>
+            .stats-box {
+                display: flex;
+                justify-content: space-between;
+                margin: 20px 0;
+                gap: 20px;
+            }
+
+            .stat {
+                flex: 1;
+                padding: 15px;
+                background: #f5f5f5;
+                border-radius: 8px;
+                text-align: center;
+            }
+
+            .stat h3 {
+                margin: 0 0 10px 0;
+                color: #333;
+                font-size: 16px;
+            }
+
+            .stat p {
+                margin: 0;
+                font-size: 24px;
+                font-weight: bold;
+                color: #2c3e50;
+            }
+
+            .winner-box {
+                margin: 20px 0;
+                padding: 20px;
+                background: #e8f5e9;
+                border-radius: 8px;
+                text-align: center;
+            }
+
+            .winner-box h3 {
+                margin: 0 0 10px 0;
+                color: #2e7d32;
+            }
+
+            .winner-text {
+                margin: 0;
+                font-size: 28px;
+                font-weight: bold;
+                color: #1b5e20;
+            }
+
+            #resultsTable {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+            }
+
+            #resultsTable th,
+            #resultsTable td {
+                padding: 12px;
+                text-align: left;
+                border-bottom: 1px solid #ddd;
+            }
+
+            #resultsTable th {
+                background-color: #f5f5f5;
+                font-weight: bold;
+            }
+
+            #resultsTable td:nth-child(2),
+            #resultsTable td:nth-child(3) {
+                text-align: right;
+            }
+            </style>
+
+            <script>
+            async function fetchResults() {
+                try {
+                    const response = await fetch('/results');
+                    if (!response.ok) throw new Error('Failed to fetch results');
+                    
+                    const data = await response.json();
+                    const resultsDiv = document.getElementById('results');
+                    if (!resultsDiv) return;
+
+                    resultsDiv.style.display = 'block';
+                    document.getElementById('totalRegistered').textContent = data.totalRegistered;
+                    document.getElementById('totalVotes').textContent = data.totalVotes;
+                    document.getElementById('turnout').textContent = `${data.turnout}%`;
+                    document.getElementById('winner').textContent = data.winner;
+
+                    const tbody = document.querySelector('#resultsTable tbody');
+                    tbody.innerHTML = Object.entries(data.percentages)
+                        .map(([option, percentage]) => `
+                            <tr>
+                                <td>${option}</td>
+                                <td>${data.breakdown[option]}</td>
+                                <td>${percentage}%</td>
+                            </tr>
+                        `).join('');
+                } catch (error) {
+                    console.error('Error fetching results:', error);
+                    showAlert(error.message, 'error');
+                }
+            }
+
+            // Auto-refresh results in tallying phase
+            if ('<%= electionState.phase %>' === 'TALLYING' || '<%= electionState.phase %>' === 'COMPLETED') {
+                fetchResults();
+                const resultInterval = setInterval(fetchResults, 30000);
+                window.addEventListener('beforeunload', () => clearInterval(resultInterval));
+            }
+            </script>
+        <% } %>
+    </div>
+
+    <script>
+    async function handleInitialization(event) {
+        event.preventDefault();
+        const form = event.target;
+        
+        // Gather all options
+        const optionInputs = form.querySelectorAll('input[name="options[]"]');
+        const options = Array.from(optionInputs).map(input => input.value).filter(val => val.trim() !== '');
+        
+        const data = {
+            question: form.question.value.trim(),
+            options: options,
+            durationInHours: parseInt(form.durationInHours.value)
+        };
+
+        // Log initialization attempt
+        console.log('%c Election Initialization Started', 'background: #222; color: #bada55');
+        console.log('Data:', data);
+
+        try {
+            console.log('Sending request to /init-election...');
+            const response = await fetch('/init-election', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            
+            const result = await response.json();
+            console.log('Server response:', {
+                status: response.status,
+                result: result
+            });
+            
+            if (response.ok) {
+                showAlert('Election initialized successfully!', 'success');
+                
+                // Check election state
+                console.log('Checking election state...');
+                const stateResponse = await fetch('/election-state');
+                const state = await stateResponse.json();
+                console.log('Current election state:', state);
+
+                // Use a longer delay and show what's happening
+                showAlert('Initialization successful! Redirecting in 2 seconds...', 'success');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                console.log('Redirecting to admin page...');
+                window.location.href = '/admin';
+            } else {
+                throw new Error(result.error || 'Failed to initialize election');
+            }
+        } catch (error) {
+            console.error('Initialization failed:', error);
+            showAlert(error.message, 'error');
+        }
+        return false;
+    }
+
+    async function handleStartVoting(event) {
+        event.preventDefault();
+        try {
+            console.log('Starting voting phase...');
+            const response = await fetch('/start-voting', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const result = await response.json();
+            console.log('Start voting response:', result);
+            
+            if (response.ok) {
+                showAlert('Voting phase started successfully!', 'success');
+                setTimeout(() => {
+                    console.log('Reloading page after starting voting phase...');
+                    window.location.reload();
+                }, 1000);
+            } else {
+                throw new Error(result.error || 'Failed to start voting phase');
+            }
+        } catch (error) {
+            console.error('Start voting error:', error);
+            showAlert(error.message, 'error');
+        }
+        return false;
+    }
+
+    async function handleStartTallying(event) {
+        event.preventDefault();
+        try {
+            const response = await fetch('/start-tallying', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            const result = await response.json();
+            if (response.ok) {
+                showAlert('Tallying phase started successfully!', 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                throw new Error(result.error || 'Failed to start tallying phase');
+            }
+        } catch (error) {
+            showAlert(error.message, 'error');
+        }
+        return false;
+    }
+
+    function showAlert(message, type) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert ${type}`;
+        alertDiv.textContent = message;
+        document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.status-box'));
+        setTimeout(() => alertDiv.remove(), 5000);
+    }
+
+    function addOption() {
+        const container = document.getElementById('options-container');
+        const newInput = document.createElement('input');
+        newInput.type = 'text';
+        newInput.name = 'options[]';
+        newInput.placeholder = `Additional Candidate`;
+        newInput.required = true;
+        container.appendChild(newInput);
+    }
+    </script>
+
+    <style>
+    .form-group {
+        margin-bottom: 15px;
+    }
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    input[type="text"], input[type="number"] {
+        width: 100%;
+        padding: 8px;
+        margin-bottom: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+    }
+    .alert {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+    }
+    .alert.success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    .alert.error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    </style>
+</body>
+</html> 
