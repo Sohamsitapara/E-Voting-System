@@ -33,73 +33,16 @@ A secure, privacy-preserving remote voting system built with Node.js and TypeScr
 
 ---
 
-## 🛠️ Prerequisites
 
-Before setting up the project, ensure you have the following installed:
+## 🔐 Security Overview
 
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- [Bun](https://bun.sh/) (v1.1.15 or higher)
-- [Git](https://git-scm.com/)
-
----
-
-## ⚙️ Installation
-
-1. **Clone the Repository**
-
-   ```bash
-   git clone https://github.com/Sohamsitapara/E-Voting-System.git
-   cd E-Voting-System
-   ```
-
-2. **Install Dependencies**
-
-   Using Bun:
-
-   ```bash
-   bun install
-   ```
-
-3. **Configure Environment Variables**
-
-   - Duplicate the `.env.example` file and rename it to `.env`:
-
-     ```bash
-     cp .env.example .env
-     ```
-
-   - Update the `.env` file with your specific configuration:
-
-     ```env
-     PORT=3000
-     SSL_KEY_PATH=./certs/key.pem
-     SSL_CERT_PATH=./certs/cert.pem
-     ```
-
-4. **Generate SSL Certificates**
-
-   If you don't have SSL certificates, generate self-signed certificates for development:
-
-   ```bash
-   mkdir certs
-   openssl req -nodes -new -x509 -keyout certs/key.pem -out certs/cert.pem
-   ```
-
-   Follow the prompts to complete the certificate generation.
+- **Shamir’s Secret Sharig:** Distributes the decryption key among multiple parties, ensuring that no single entity can decrypt votes independntly.
+- **ElGamal Cryptosystm:** Provides homomorphic encryption, allowing for secure vote tallying without decrypting individual otes.
+- **SSL Certificats:** Ensure secure communication between clients and the server, preventing man-in-the-middle atacks.
 
 ---
 
-## 🚀 Running the Application
-
-Start the server using Bun:
-
-```bash
-bun run index.ts
-```
-
-The application will be accessible at `https://localhost:3000`.
-
----
+Feel free to customize this `README.md` further to suit your project's needs. Let me know if you need assistance with any specific sections or additional features! 
 
 ## 🧪 Testing the Application
 
